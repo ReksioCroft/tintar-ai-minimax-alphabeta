@@ -49,10 +49,10 @@ class Stare:
             lin_in_matrice = i // 3
             col_in_matrice = i % 3
             if cls.decodif_poz_matrice[i][0] == lin_reala:
-                if matrix[lin_in_matrice][col_in_matrice] != matrix[poz[0]][poz[1]] and not (col_reala < 4 < cls.decodif_poz_matrice[i][1] or col_reala > 4 > cls.decodif_poz_matrice[i][1]):
+                if matrix[lin_in_matrice][col_in_matrice] != matrix[poz[0]][poz[1]] and (lin_reala != 4 or not (col_reala < 4 < cls.decodif_poz_matrice[i][1] or col_reala > 4 > cls.decodif_poz_matrice[i][1])):
                     ok_moara_col = False
-            if cls.decodif_poz_matrice[i][1] == col_reala and not (lin_reala < 4 < cls.decodif_poz_matrice[i][0] or lin_reala > 4 > cls.decodif_poz_matrice[i][0]):
-                if matrix[lin_in_matrice][col_in_matrice] != matrix[poz[0]][poz[1]]:
+            if cls.decodif_poz_matrice[i][1] == col_reala:
+                if matrix[lin_in_matrice][col_in_matrice] != matrix[poz[0]][poz[1]] and (col_reala != 4 or not (lin_reala < 4 < cls.decodif_poz_matrice[i][0] or lin_reala > 4 > cls.decodif_poz_matrice[i][0])):
                     ok_moara_lin = False
         return ok_moara_lin or ok_moara_col
 
