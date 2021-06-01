@@ -1,6 +1,7 @@
 import tkinter
 import functools
 import copy
+import time
 
 
 class Stare:
@@ -217,7 +218,7 @@ class Stare:
 class MorrisBoard(tkinter.Tk):
     buttons = []
 
-    def __init__(self, algoritm=2, jucator_om=True, adancime_maxima=2):
+    def __init__(self, algoritm=2, jucator_om=1, adancime_maxima=2):
         super().__init__()
         self.geometry("440x552")
         self.title("Octavian-Florin Staicu - Tintar")
@@ -225,8 +226,7 @@ class MorrisBoard(tkinter.Tk):
         bg = tkinter.PhotoImage(file="board13.png")
         label = tkinter.Label(self.board_frame, image=bg)
         label.place(x=0, y=0)
-        self.stare_initiala = Stare(Stare.generare_matrice())
-        self.stare_curenta = self.stare_initiala
+        self.stare_curenta = Stare(Stare.generare_matrice())
         self.add_buttons(5)
         self.poz_piesa_care_se_muta = None
         self.jucator_ai = not jucator_om
@@ -234,61 +234,94 @@ class MorrisBoard(tkinter.Tk):
         self.board_frame.grid(row=1, column=1)
         self.adancime_maxima = adancime_maxima
         self.utilizator_ready = False
+        self.t_ai_min = float('inf')
+        self.t_ai_max = float('-inf')
+        self.t_ai = 0
+        self.t0 = time.time()
+        self.co_apeluri_ai = 0
+        self.finalizat = False
+        self.euristica = True
 
-        if self.algoritm > 0 and self.jucator_ai:
-            self.ai_play()
+        if jucator_om == 2:
+            while not Stare.is_final_state(self.stare_curenta):
+                self.ai_play()
+                self.euristica = not self.euristica
+                self.jucator_ai = not self.jucator_ai
+        else:
+            if self.algoritm > 0 and self.jucator_ai:
+                self.ai_play()
 
         self.mainloop()
 
+        self.finalizare()
+
     def play_next_move(self, poz):
-        print("Este randul jucatorului " + "alb" if self.stare_curenta.jucator_curent_alb else "negru")
-        self.utilizator_ready = False
-        try:
-            idx = Stare.decodif_poz_matrice.index(poz)
-            lin, col = (idx // 3, idx % 3)
-            if self.stare_curenta.se_scoate_o_piesa:
-                """
-                se scoate o piesa a adversarului care nu este in moara
-                """
-                self.eliminare_piesa(idx=idx, lin=lin, col=col)
-            else:
-                if (self.stare_curenta.jucator_curent_alb and self.stare_curenta.piese_albe_nefolosite > 0) or ((not self.stare_curenta.jucator_curent_alb) and self.stare_curenta.piese_negre_nefolosite > 0):
+        if not self.finalizat:
+            utilizator = "alb" if self.stare_curenta.jucator_curent_alb else "negru"
+            print("Este randul jucatorului " + utilizator)
+            self.utilizator_ready = False
+            try:
+                idx = Stare.decodif_poz_matrice.index(poz)
+                lin, col = (idx // 3, idx % 3)
+                if self.stare_curenta.se_scoate_o_piesa:
                     """
-                    se adauga o noua piese pe o pozitie goala
+                    se scoate o piesa a adversarului care nu este in moara
                     """
-                    self.adaugare_piesa(idx=idx, lin=lin, col=col)
+                    self.eliminare_piesa(idx=idx, lin=lin, col=col)
                 else:
-                    """
-                    se muta o piesa
-                    """
-                    self.mutare_piesa(poz=poz, idx=idx, lin=lin, col=col)
-            self.stare_curenta.print_matrix()
-            if self.algoritm > 0 and self.utilizator_ready and (not self.stare_curenta.se_scoate_o_piesa) and self.algoritm > 0:
-                self.ai_play()
-            self.stare_curenta.print_matrix()
-        except ValueError:
-            return
+                    if (self.stare_curenta.jucator_curent_alb and self.stare_curenta.piese_albe_nefolosite > 0) or ((not self.stare_curenta.jucator_curent_alb) and self.stare_curenta.piese_negre_nefolosite > 0):
+                        """
+                        se adauga o noua piese pe o pozitie goala
+                        """
+                        self.adaugare_piesa(idx=idx, lin=lin, col=col)
+                    else:
+                        """
+                        se muta o piesa
+                        """
+                        self.mutare_piesa(poz=poz, idx=idx, lin=lin, col=col)
+                self.stare_curenta.print_matrix()
+                print("Timp de gandire {}: {}s".format(utilizator, time.time() - self.t0))
+                self.t0 = time.time()
+                if self.algoritm > 0 and self.utilizator_ready and (not self.stare_curenta.se_scoate_o_piesa) and self.algoritm > 0:
+                    self.ai_play()
+            except ValueError:
+                return
+            self.finalizare()
 
     def ai_play(self):
-        print("Este randului AI: jucator " + "alb" if self.jucator_ai else "negru")
-        if self.algoritm == 1:
-            self.stare_curenta = self.mini_max(stare=self.stare_curenta, jucator_curent=self.jucator_ai, adancime_ramasa=self.adancime_maxima)
-            if self.stare_curenta.se_scoate_o_piesa:
+        if not self.finalizat:
+            utilizator = "alb" if self.jucator_ai else "negru"
+            print("Este randului AI: jucator " + utilizator)
+            if self.algoritm == 1:
                 self.stare_curenta = self.mini_max(stare=self.stare_curenta, jucator_curent=self.jucator_ai, adancime_ramasa=self.adancime_maxima)
-        #TODO
-        # else:
-        #     self.stare_curenta = self.alpha_beta(stare=self.stare_curenta, jucator_curent=self.jucator_ai, adancime_ramasa=self.adancime_maxima)
-        #     if self.stare_curenta.se_scoate_o_piesa:
-        #         self.stare_curenta = self.alpha_beta(stare=self.stare_curenta, jucator_curent=self.jucator_ai, adancime_ramasa=self.adancime_maxima)
+                if self.stare_curenta.se_scoate_o_piesa:
+                    self.stare_curenta = self.mini_max(stare=self.stare_curenta, jucator_curent=self.jucator_ai, adancime_ramasa=self.adancime_maxima)
+            else:
+                self.stare_curenta = self.alpha_beta(stare=self.stare_curenta, alpha=float('-inf'), beta=float('inf'), jucator_curent=self.jucator_ai, adancime_ramasa=self.adancime_maxima)
+                if self.stare_curenta.se_scoate_o_piesa:
+                    self.stare_curenta = self.alpha_beta(stare=self.stare_curenta, alpha=float('-inf'), beta=float('inf'), jucator_curent=self.jucator_ai, adancime_ramasa=self.adancime_maxima)
 
-        for i in range(len(self.stare_curenta.matrix)):
-            for j in range(len(self.stare_curenta.matrix[i])):
-                if self.stare_curenta.matrix[i][j] is True:
-                    self.buttons[i * 3 + j].configure(bg='white')
-                elif self.stare_curenta.matrix[i][j] is False:
-                    self.buttons[i * 3 + j].configure(bg='black')
-                else:
-                    self.buttons[i * 3 + j].configure(bg='grey')
+            for i in range(len(self.stare_curenta.matrix)):
+                for j in range(len(self.stare_curenta.matrix[i])):
+                    if self.stare_curenta.matrix[i][j] is True:
+                        self.buttons[i * 3 + j].configure(bg='white')
+                    elif self.stare_curenta.matrix[i][j] is False:
+                        self.buttons[i * 3 + j].configure(bg='black')
+                    else:
+                        self.buttons[i * 3 + j].configure(bg='grey')
+            self.stare_curenta.print_matrix()
+            t = time.time() - self.t0
+            self.t0 = time.time()
+            if t > self.t_ai_max:
+                self.t_ai_max = t
+            if t < self.t_ai_min:
+                self.t_ai_min = t
+            self.t_ai += t
+            self.co_apeluri_ai += 1
+            print("Timp de gandire AI-{}: {}s".format(utilizator, t))
+            euristica = "estimeaza_scor_by_pioni" if self.euristica else "estimeaza_scor_by_moara"
+            print("Estimare Scor AI: {}, folosind Euristica={}".format(self.stare_curenta.estimare, euristica))
+            self.finalizare()
 
     def add_buttons(self, dim):
         for lin, col in Stare.decodif_poz_matrice:
@@ -388,9 +421,15 @@ class MorrisBoard(tkinter.Tk):
                         co -= 1
         return co
 
+    def estimeaza_scor(self, stare):
+        if self.euristica:
+            return self.estimeaza_scor_by_pioni(stare)
+        else:
+            return self.estimeaza_scor_by_moara(stare)
+
     def mini_max(self, stare, adancime_ramasa, jucator_curent):
         if stare.is_final_state() or adancime_ramasa == 0:
-            stare.estimare = self.estimeaza_scor_by_pioni(stare)
+            stare.estimare = self.estimeaza_scor(stare)
             return stare
         else:
             scoruri = [self.mini_max(x, adancime_ramasa - 1, not jucator_curent) for x in stare.generare_succesori()]
@@ -404,8 +443,64 @@ class MorrisBoard(tkinter.Tk):
             else:
                 return stare_aleasa
 
-    def alpha_beta(self, stare, adancime_ramasa, jucator_curent):
-        pass
+    def alpha_beta(self, stare, alpha, beta, adancime_ramasa, jucator_curent):
+        if stare.is_final_state() or adancime_ramasa == 0:
+            stare.estimare = self.estimeaza_scor(stare)
+            return stare
+
+        elif alpha > beta:
+            return stare
+
+        else:
+            stare_aleasa = stare
+            if jucator_curent == self.jucator_ai:
+                estimare_curenta = float('-inf')
+                for stare_noua in stare.generare_succesori():
+                    stare_noua_cu_aproximare = self.alpha_beta(stare_noua, alpha, beta, adancime_ramasa - 1, not jucator_curent)
+
+                    if estimare_curenta < stare_noua_cu_aproximare.estimare:
+                        stare_aleasa = stare_noua_cu_aproximare
+                        estimare_curenta = stare_noua_cu_aproximare.estimare
+                    if alpha < stare_noua_cu_aproximare.estimare:
+                        alpha = stare_noua_cu_aproximare.estimare
+                        if alpha >= beta:
+                            break
+            else:
+                estimare_curenta = float('inf')
+                for stare_noua in stare.generare_succesori():
+                    stare_noua_cu_aproximare = self.alpha_beta(stare_noua, alpha, beta, adancime_ramasa - 1, not jucator_curent)
+
+                    if estimare_curenta > stare_noua_cu_aproximare.estimare:
+                        stare_aleasa = stare_noua_cu_aproximare
+                        estimare_curenta = stare_noua_cu_aproximare.estimare
+                    if beta > stare_noua_cu_aproximare.estimare:
+                        beta = stare_noua_cu_aproximare.estimare
+                        if alpha >= beta:
+                            break
+            stare.estimare = stare_aleasa.estimare
+            if adancime_ramasa < self.adancime_maxima:
+                return stare
+            else:
+                return stare_aleasa
+
+    def finalizare(self):
+        if (not self.finalizat) and self.stare_curenta.is_final_state():
+            self.finalizat = True
+            if self.algoritm > 0:
+                print("Statistici Timp AI: min={}, max={}, avg={}".format(self.t_ai_min, self.t_ai_max, round(self.t_ai / self.co_apeluri_ai, 5)))
+
+            button = tkinter.Button(self.board_frame, height=4, width=4, command=self._root().destroy, activebackground='red')
+            button.grid(row=4, column=4)
+
+            if self.stare_curenta.piese_albe_pe_tabla >= 3 > self.stare_curenta.piese_negre_pe_tabla:
+                print("A castigat jucatorul ALB")
+                button.configure(bg='white')
+            elif self.stare_curenta.piese_negre_pe_tabla >= 3 > self.stare_curenta.piese_albe_pe_tabla:
+                print("A castigat jucatorul NEGRU")
+                button.configure(bg='black')
+            else:
+                print("REMIZA")
+                button.configure(bg='purple')
 
 
 if __name__ == "__main__":
@@ -417,19 +512,20 @@ if __name__ == "__main__":
         if tip_algoritm in ['0', '1', '2']:
             raspuns_valid = True
         else:
-            print("Nu ati ales o varianta corecta.")
+            print("Nu ati ales o varianta corecta...")
     # initializare jucatori
-    raspuns_valid = False
-    jucator = None
-    while not raspuns_valid:
-        jucator = input("Jucator? (raspundeti cu 0 sau 1)\n 0.negru\n 1.alb\n")
-        if jucator in ['1', '0']:
-            raspuns_valid = True
-        else:
-            print("Raspunsul trebuie sa fie 1 sau 0")
+    jucator = '1'
+    if tip_algoritm != '0':
+        raspuns_valid = False
+        while not raspuns_valid:
+            jucator = input("Jucator? (raspundeti cu 0, 1 sau 2)\n 0.negru\n 1.alb\n 2.AI vs AI\n ")
+            if jucator in ['0', '1', '2']:
+                raspuns_valid = True
+            else:
+                print("Nu ati ales o varianta corecta...")
 
     # initializare adancime
-    nivel = 0
+    nivel = '0'
     if tip_algoritm != '0':
         raspuns_valid = False
         while not raspuns_valid:
@@ -437,12 +533,7 @@ if __name__ == "__main__":
             if nivel in ['1', '2', '3']:
                 raspuns_valid = True
             else:
-                print("Raspunsul trebuie sa fie 1 sau 0")
+                print("Nu ati ales o varianta corecta...")
 
-    play = MorrisBoard(algoritm=int(tip_algoritm), jucator_om=bool(int(jucator)), adancime_maxima=int(nivel))
-    if play.stare_curenta.piese_albe_pe_tabla >= 3 > play.stare_curenta.piese_negre_pe_tabla:
-        print("A castigat jucatorul ALB")
-    elif play.stare_curenta.piese_negre_pe_tabla >= 3 > play.stare_curenta.piese_albe_pe_tabla:
-        print("A castigat jucatorul NEGRU")
-    else:
-        print("REMIZA")
+    # pornire joc
+    MorrisBoard(algoritm=int(tip_algoritm), jucator_om=int(jucator), adancime_maxima=int(nivel))
