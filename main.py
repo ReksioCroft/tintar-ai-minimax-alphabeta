@@ -2,6 +2,7 @@ import tkinter
 import functools
 import copy
 import time
+import statistics
 
 
 class Stare:
@@ -227,6 +228,7 @@ class MorrisBoard(tkinter.Tk):
         label = tkinter.Label(self.board_frame, image=bg)
         label.place(x=0, y=0)
         self.stare_curenta = Stare(Stare.generare_matrice())
+        self.exit_button = None
         self.add_buttons(5)
         self.poz_piesa_care_se_muta = None
         self.jucator_ai = not jucator_om
@@ -234,11 +236,13 @@ class MorrisBoard(tkinter.Tk):
         self.board_frame.grid(row=1, column=1)
         self.adancime_maxima = adancime_maxima
         self.utilizator_ready = False
-        self.t_ai_min = float('inf')
-        self.t_ai_max = float('-inf')
-        self.t_ai = 0
+        self.t_ai = []
+        self.nr_noduri_ai = []
+        self.nr_noduri_ai_curent = 0
+        self.t = time.time()
         self.t0 = time.time()
         self.co_apeluri_ai = 0
+        self.co_apeluri_om = 0
         self.finalizat = False
         self.euristica = True
 
@@ -253,7 +257,7 @@ class MorrisBoard(tkinter.Tk):
 
         self.mainloop()
 
-        self.finalizare()
+        self.finalizare(forced_quit=True)
 
     def play_next_move(self, poz):
         if not self.finalizat:
@@ -279,9 +283,10 @@ class MorrisBoard(tkinter.Tk):
                         se muta o piesa
                         """
                         self.mutare_piesa(poz=poz, idx=idx, lin=lin, col=col)
+                print("Timp de gandire {}: {}s".format(utilizator, time.time() - self.t))
                 self.stare_curenta.print_matrix()
-                print("Timp de gandire {}: {}s".format(utilizator, time.time() - self.t0))
-                self.t0 = time.time()
+                self.t = time.time()
+                self.co_apeluri_om += 1
                 if self.algoritm > 0 and self.utilizator_ready and (not self.stare_curenta.se_scoate_o_piesa) and self.algoritm > 0:
                     self.ai_play()
             except ValueError:
@@ -292,14 +297,17 @@ class MorrisBoard(tkinter.Tk):
         if not self.finalizat:
             utilizator = "alb" if self.jucator_ai else "negru"
             print("Este randului AI: jucator " + utilizator)
+            self.nr_noduri_ai_curent = 0
             if self.algoritm == 1:
                 self.stare_curenta = self.mini_max(stare=self.stare_curenta, jucator_curent=self.jucator_ai, adancime_ramasa=self.adancime_maxima)
                 if self.stare_curenta.se_scoate_o_piesa:
                     self.stare_curenta = self.mini_max(stare=self.stare_curenta, jucator_curent=self.jucator_ai, adancime_ramasa=self.adancime_maxima)
+                    self.co_apeluri_ai += 1
             else:
                 self.stare_curenta = self.alpha_beta(stare=self.stare_curenta, alpha=float('-inf'), beta=float('inf'), jucator_curent=self.jucator_ai, adancime_ramasa=self.adancime_maxima)
                 if self.stare_curenta.se_scoate_o_piesa:
                     self.stare_curenta = self.alpha_beta(stare=self.stare_curenta, alpha=float('-inf'), beta=float('inf'), jucator_curent=self.jucator_ai, adancime_ramasa=self.adancime_maxima)
+                    self.co_apeluri_ai += 1
 
             for i in range(len(self.stare_curenta.matrix)):
                 for j in range(len(self.stare_curenta.matrix[i])):
@@ -309,18 +317,17 @@ class MorrisBoard(tkinter.Tk):
                         self.buttons[i * 3 + j].configure(bg='black')
                     else:
                         self.buttons[i * 3 + j].configure(bg='grey')
-            self.stare_curenta.print_matrix()
-            t = time.time() - self.t0
-            self.t0 = time.time()
-            if t > self.t_ai_max:
-                self.t_ai_max = t
-            if t < self.t_ai_min:
-                self.t_ai_min = t
-            self.t_ai += t
+
+            timp_gandire = time.time() - self.t
+            self.t_ai.append(timp_gandire)
+            self.t = time.time()
             self.co_apeluri_ai += 1
-            print("Timp de gandire AI-{}: {}s".format(utilizator, t))
+            self.nr_noduri_ai.append(self.nr_noduri_ai_curent)
+            print("Timp de gandire AI-{}: {}s".format(utilizator, timp_gandire))
             euristica = "estimeaza_scor_by_pioni" if self.euristica else "estimeaza_scor_by_moara"
             print("Estimare Scor AI: {}, folosind Euristica={}".format(self.stare_curenta.estimare, euristica))
+            print("Nr noduri generate de AI: {}".format(self.nr_noduri_ai_curent))
+            self.stare_curenta.print_matrix()
             self.finalizare()
 
     def add_buttons(self, dim):
@@ -328,6 +335,8 @@ class MorrisBoard(tkinter.Tk):
             button = tkinter.Button(self.board_frame, height=dim, width=dim, command=functools.partial(self.play_next_move, (lin, col)), bg="grey", activebackground='green')
             button.grid(row=lin, column=col)
             self.buttons.append(button)
+        self.exit_button = tkinter.Button(self.board_frame, height=3, width=3, command=self._root().destroy, activebackground='red')
+        self.exit_button.grid(row=4, column=4)
 
     def eliminare_piesa(self, idx, lin, col):
         if self.stare_curenta.matrix[lin][col] == (not self.stare_curenta.jucator_curent_alb) and (not Stare.este_in_moara(self.stare_curenta.matrix, (lin, col))):
@@ -433,6 +442,7 @@ class MorrisBoard(tkinter.Tk):
             return stare
         else:
             scoruri = [self.mini_max(x, adancime_ramasa - 1, not jucator_curent) for x in stare.generare_succesori()]
+            self.nr_noduri_ai_curent += len(scoruri)
             if jucator_curent == self.jucator_ai:
                 stare_aleasa = max(scoruri, key=lambda stare_x: stare_x.estimare)
             else:
@@ -457,7 +467,7 @@ class MorrisBoard(tkinter.Tk):
                 estimare_curenta = float('-inf')
                 for stare_noua in stare.generare_succesori():
                     stare_noua_cu_aproximare = self.alpha_beta(stare_noua, alpha, beta, adancime_ramasa - 1, not jucator_curent)
-
+                    self.nr_noduri_ai_curent += 1
                     if estimare_curenta < stare_noua_cu_aproximare.estimare:
                         stare_aleasa = stare_noua_cu_aproximare
                         estimare_curenta = stare_noua_cu_aproximare.estimare
@@ -469,7 +479,7 @@ class MorrisBoard(tkinter.Tk):
                 estimare_curenta = float('inf')
                 for stare_noua in stare.generare_succesori():
                     stare_noua_cu_aproximare = self.alpha_beta(stare_noua, alpha, beta, adancime_ramasa - 1, not jucator_curent)
-
+                    self.nr_noduri_ai_curent += 1
                     if estimare_curenta > stare_noua_cu_aproximare.estimare:
                         stare_aleasa = stare_noua_cu_aproximare
                         estimare_curenta = stare_noua_cu_aproximare.estimare
@@ -483,29 +493,30 @@ class MorrisBoard(tkinter.Tk):
             else:
                 return stare_aleasa
 
-    def finalizare(self):
-        if (not self.finalizat) and self.stare_curenta.is_final_state():
+    def finalizare(self, forced_quit=False):
+        if (not self.finalizat) and (self.stare_curenta.is_final_state() or forced_quit):
             self.finalizat = True
-            if self.algoritm > 0:
-                print("Statistici Timp AI: min={}, max={}, avg={}".format(self.t_ai_min, self.t_ai_max, round(self.t_ai / self.co_apeluri_ai, 5)))
-
-            button = tkinter.Button(self.board_frame, height=4, width=4, command=self._root().destroy, activebackground='red')
-            button.grid(row=4, column=4)
-
-            if self.stare_curenta.piese_albe_pe_tabla >= 3 > self.stare_curenta.piese_negre_pe_tabla:
-                print("A castigat jucatorul ALB")
-                button.configure(bg='white')
-            elif self.stare_curenta.piese_negre_pe_tabla >= 3 > self.stare_curenta.piese_albe_pe_tabla:
-                print("A castigat jucatorul NEGRU")
-                button.configure(bg='black')
-            else:
-                print("REMIZA")
-                button.configure(bg='purple')
+            if self.algoritm > 0 and self.co_apeluri_ai > 0:
+                print("Statistici Timp AI: min={}, max={}, avg={}, mediana={}".format(min(self.t_ai), max(self.t_ai), round(sum(self.t_ai) / self.co_apeluri_ai, 5), statistics.median(self.t_ai)))
+                print("Statistici Nr noduri create de AI: min={}, max={}, avg={}, mediana={}".format(min(self.nr_noduri_ai), max(self.nr_noduri_ai), round(sum(self.nr_noduri_ai) / self.co_apeluri_ai, 5), statistics.median(self.nr_noduri_ai)))
+            print("Timp total de joc: {}s".format(time.time() - self.t0))
+            print("AI apelat de {} ori".format(self.co_apeluri_ai))
+            print("Om-ul a avut {} mutari".format(self.co_apeluri_om))
+            if not forced_quit:
+                if self.stare_curenta.piese_albe_pe_tabla >= 3 > self.stare_curenta.piese_negre_pe_tabla:
+                    print("A castigat jucatorul ALB")
+                    self.exit_button.configure(bg='white')
+                elif self.stare_curenta.piese_negre_pe_tabla >= 3 > self.stare_curenta.piese_albe_pe_tabla:
+                    print("A castigat jucatorul NEGRU")
+                    self.exit_button.configure(bg='black')
+                else:
+                    print("REMIZA")
+                    self.exit_button.configure(bg='purple')
 
 
 if __name__ == "__main__":
     # initializare algoritm
-    tip_algoritm = None
+    tip_algoritm = 2
     raspuns_valid = False
     while not raspuns_valid:
         tip_algoritm = input("Algorimul folosit? (raspundeti cu 0, 1 sau 2)\n 0.Om vs Om\n 1.Minimax\n 2.Alpha-beta\n ")
