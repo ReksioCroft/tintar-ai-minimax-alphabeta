@@ -31,6 +31,7 @@ class Stare:
         self.jucator_curent_alb = jucator_curent_alb
         self.se_scoate_o_piesa = se_scoate_o_piesa
         self.l_succesori = None
+        self.estimare = None
 
     def __eq__(self, o):
         if self.__class__ == o.__class__:
@@ -39,6 +40,14 @@ class Stare:
                    and self.se_scoate_o_piesa == o.se_scoate_o_piesa
         else:
             return False
+
+    def print_matrix(self):
+        for i in range(len(self.matrix)):
+            if i != 3:
+                print(self.matrix[i])
+            else:
+                print(self.matrix[i], end="     ")
+        print("...............")
 
     @classmethod
     def este_in_moara(cls, matrix, poz):
@@ -55,6 +64,40 @@ class Stare:
                 if matrix[lin_in_matrice][col_in_matrice] != matrix[poz[0]][poz[1]] and (col_reala != 4 or not (lin_reala < 4 < cls.decodif_poz_matrice[i][0] or lin_reala > 4 > cls.decodif_poz_matrice[i][0])):
                     ok_moara_lin = False
         return ok_moara_lin or ok_moara_col
+
+    @classmethod
+    def aproape_moara(cls, matrix, poz):
+        """
+        Aproape moara inseamna ca pe o linie sau o coloana exista doua piese de aceeasi culoara
+        :param matrix:
+        :param poz:
+        :return:
+        """
+        lin_reala, col_reala = cls.decodif_poz_matrice[poz[0] * 3 + poz[1]]
+        for i in range(len(cls.decodif_poz_matrice)):
+            lin_in_matrice = i // 3
+            col_in_matrice = i % 3
+            if cls.decodif_poz_matrice[i][0] == lin_reala and cls.decodif_poz_matrice[i][1] != col_reala:
+                if matrix[lin_in_matrice][col_in_matrice] == matrix[poz[0]][poz[1]] and (lin_reala != 4 or not (col_reala < 4 < cls.decodif_poz_matrice[i][1] or col_reala > 4 > cls.decodif_poz_matrice[i][1])):
+                    return True
+            if cls.decodif_poz_matrice[i][1] == col_reala and cls.decodif_poz_matrice[i][0] != lin_reala:
+                if matrix[lin_in_matrice][col_in_matrice] == matrix[poz[0]][poz[1]] and (col_reala != 4 or not (lin_reala < 4 < cls.decodif_poz_matrice[i][0] or lin_reala > 4 > cls.decodif_poz_matrice[i][0])):
+                    return True
+        return False
+
+    @classmethod
+    def se_poate_deplasa(cls, matrix, poz):
+        linie_reala_actuala, coloana_reala_actuala = Stare.decodif_poz_matrice[poz[0] * 3 + poz[1]]
+        for lin, col in [(-1, 0), (0, 1), (1, 0), (0, -1)]:
+            try:
+                idx_pozitie_noua = cls.decodif_poz_matrice.index((linie_reala_actuala + lin * max(1, abs(coloana_reala_actuala - 4)), coloana_reala_actuala + col * max(1, abs(linie_reala_actuala - 4))))
+                new_lin = idx_pozitie_noua // 3
+                new_col = idx_pozitie_noua % 3
+                if matrix[new_lin][new_col] is None:
+                    return True
+            except ValueError:
+                continue
+        return False
 
     def generare_succesori(self):
         """
@@ -164,11 +207,17 @@ class Stare:
         else:
             raise ValueError
 
+    def is_final_state(self):
+        if self.piese_albe_nefolosite == 0 and self.piese_negre_nefolosite == 0 and (self.piese_negre_pe_tabla < 3 or self.piese_albe_pe_tabla < 3):
+            return True
+        else:
+            return len(self.generare_succesori()) == 0
+
 
 class MorrisBoard(tkinter.Tk):
     buttons = []
 
-    def __init__(self):
+    def __init__(self, algoritm=2, jucator_om=True, adancime_maxima=2):
         super().__init__()
         self.geometry("440x552")
         self.title("Octavian-Florin Staicu - Tintar")
@@ -180,86 +229,220 @@ class MorrisBoard(tkinter.Tk):
         self.stare_curenta = self.stare_initiala
         self.add_buttons(5)
         self.poz_piesa_care_se_muta = None
-
+        self.jucator_ai = not jucator_om
+        self.algoritm = algoritm
         self.board_frame.grid(row=1, column=1)
+        self.adancime_maxima = adancime_maxima
+        self.utilizator_ready = False
+
+        if self.algoritm > 0 and self.jucator_ai:
+            self.ai_play()
 
         self.mainloop()
 
     def play_next_move(self, poz):
-        idx = Stare.decodif_poz_matrice.index(poz)
-        lin, col = (idx // 3, idx % 3)
-        if self.stare_curenta.se_scoate_o_piesa:
-            """
-            se scoate o piesa a adversarului care nu este in moara
-            """
-            self.eliminare_piesa(idx=idx, lin=lin, col=col)
-        else:
-            if (self.stare_curenta.jucator_curent_alb and self.stare_curenta.piese_albe_nefolosite > 0) or ((not self.stare_curenta.jucator_curent_alb) and self.stare_curenta.piese_negre_nefolosite > 0):
+        print("Este randul jucatorului " + "alb" if self.stare_curenta.jucator_curent_alb else "negru")
+        self.utilizator_ready = False
+        try:
+            idx = Stare.decodif_poz_matrice.index(poz)
+            lin, col = (idx // 3, idx % 3)
+            if self.stare_curenta.se_scoate_o_piesa:
                 """
-                se adauga o noua piese pe o pozitie goala
+                se scoate o piesa a adversarului care nu este in moara
                 """
-                self.adaugare_piesa(idx=idx, lin=lin, col=col)
+                self.eliminare_piesa(idx=idx, lin=lin, col=col)
             else:
-                """
-                se muta o piesa
-                """
-                self.mutare_piesa(poz=poz, idx=idx, lin=lin, col=col)
+                if (self.stare_curenta.jucator_curent_alb and self.stare_curenta.piese_albe_nefolosite > 0) or ((not self.stare_curenta.jucator_curent_alb) and self.stare_curenta.piese_negre_nefolosite > 0):
+                    """
+                    se adauga o noua piese pe o pozitie goala
+                    """
+                    self.adaugare_piesa(idx=idx, lin=lin, col=col)
+                else:
+                    """
+                    se muta o piesa
+                    """
+                    self.mutare_piesa(poz=poz, idx=idx, lin=lin, col=col)
+            self.stare_curenta.print_matrix()
+            if self.algoritm > 0 and self.utilizator_ready and (not self.stare_curenta.se_scoate_o_piesa) and self.algoritm > 0:
+                self.ai_play()
+            self.stare_curenta.print_matrix()
+        except ValueError:
+            return
+
+    def ai_play(self):
+        print("Este randului AI: jucator " + "alb" if self.jucator_ai else "negru")
+        if self.algoritm == 1:
+            self.stare_curenta = self.mini_max(stare=self.stare_curenta, jucator_curent=self.jucator_ai, adancime_ramasa=self.adancime_maxima)
+            if self.stare_curenta.se_scoate_o_piesa:
+                self.stare_curenta = self.mini_max(stare=self.stare_curenta, jucator_curent=self.jucator_ai, adancime_ramasa=self.adancime_maxima)
+        #TODO
+        # else:
+        #     self.stare_curenta = self.alpha_beta(stare=self.stare_curenta, jucator_curent=self.jucator_ai, adancime_ramasa=self.adancime_maxima)
+        #     if self.stare_curenta.se_scoate_o_piesa:
+        #         self.stare_curenta = self.alpha_beta(stare=self.stare_curenta, jucator_curent=self.jucator_ai, adancime_ramasa=self.adancime_maxima)
+
+        for i in range(len(self.stare_curenta.matrix)):
+            for j in range(len(self.stare_curenta.matrix[i])):
+                if self.stare_curenta.matrix[i][j] is True:
+                    self.buttons[i * 3 + j].configure(bg='white')
+                elif self.stare_curenta.matrix[i][j] is False:
+                    self.buttons[i * 3 + j].configure(bg='black')
+                else:
+                    self.buttons[i * 3 + j].configure(bg='grey')
 
     def add_buttons(self, dim):
         for lin, col in Stare.decodif_poz_matrice:
             button = tkinter.Button(self.board_frame, height=dim, width=dim, command=functools.partial(self.play_next_move, (lin, col)), bg="grey", activebackground='green')
             button.grid(row=lin, column=col)
-            MorrisBoard.buttons.append(button)
+            self.buttons.append(button)
 
     def eliminare_piesa(self, idx, lin, col):
-        try:
-            if self.stare_curenta.matrix[lin][col] == (not self.stare_curenta.jucator_curent_alb) and (not Stare.este_in_moara(self.stare_curenta.matrix, (lin, col))):
-                stare = Stare.eliminare_piesa(stare=self.stare_curenta, lin=lin, col=col)
-                if stare in self.stare_curenta.generare_succesori():
-                    self.stare_curenta = stare
-                    MorrisBoard.buttons[idx].configure(bg='grey')
-        except ValueError:
-            return
+        if self.stare_curenta.matrix[lin][col] == (not self.stare_curenta.jucator_curent_alb) and (not Stare.este_in_moara(self.stare_curenta.matrix, (lin, col))):
+            stare = Stare.eliminare_piesa(stare=self.stare_curenta, lin=lin, col=col)
+            if stare in self.stare_curenta.generare_succesori():
+                self.stare_curenta = stare
+                self.buttons[idx].configure(bg='grey')
+                self.utilizator_ready = True
+            else:
+                raise ValueError
+        else:
+            raise ValueError
 
     def adaugare_piesa(self, idx, lin, col):
-        try:
-            if self.stare_curenta.matrix[lin][col] is None:
-                stare = Stare.adaugare_piesa(stare=self.stare_curenta, lin=lin, col=col)
-                if stare in self.stare_curenta.generare_succesori():
-                    if self.stare_curenta.jucator_curent_alb:
-                        MorrisBoard.buttons[idx].configure(bg='white')
-                    else:
-                        MorrisBoard.buttons[idx].configure(bg='black')
-                    self.stare_curenta = stare
-        except ValueError:
-            return
+        if self.stare_curenta.matrix[lin][col] is None:
+            stare = Stare.adaugare_piesa(stare=self.stare_curenta, lin=lin, col=col)
+            if stare in self.stare_curenta.generare_succesori():
+                if self.stare_curenta.jucator_curent_alb:
+                    self.buttons[idx].configure(bg='white')
+                else:
+                    self.buttons[idx].configure(bg='black')
+                self.stare_curenta = stare
+                self.utilizator_ready = True
+            else:
+                raise ValueError
+        else:
+            raise ValueError
 
     def mutare_piesa(self, poz, idx, lin, col):
-        try:
-            if self.poz_piesa_care_se_muta is None:
-                if self.stare_curenta.matrix[lin][col] == self.stare_curenta.jucator_curent_alb:
-                    self.poz_piesa_care_se_muta = poz
-                    MorrisBoard.buttons[idx].configure(bg='cyan')
+        if self.poz_piesa_care_se_muta is None:
+            if self.stare_curenta.matrix[lin][col] == self.stare_curenta.jucator_curent_alb:
+                self.poz_piesa_care_se_muta = poz
+                self.buttons[idx].configure(bg='cyan')
+                raise ValueError
+        else:
+            old_idx = Stare.decodif_poz_matrice.index(self.poz_piesa_care_se_muta)
+            old_lin, old_col = (old_idx // 3, old_idx % 3)
+            if self.stare_curenta.jucator_curent_alb:
+                self.buttons[old_idx].configure(bg='white')
             else:
-                old_idx = Stare.decodif_poz_matrice.index(self.poz_piesa_care_se_muta)
-                old_lin, old_col = (old_idx // 3, old_idx % 3)
-                if self.stare_curenta.jucator_curent_alb:
-                    MorrisBoard.buttons[old_idx].configure(bg='white')
+                MorrisBoard.buttons[old_idx].configure(bg='black')
+            if self.stare_curenta.matrix[lin][col] is None:
+                stare = Stare.muta_piesa(stare=self.stare_curenta, old_lin=old_lin, old_col=old_col, new_lin=lin, new_col=col)
+                if stare in self.stare_curenta.generare_succesori():
+                    self.buttons[old_idx].configure(bg='grey')
+                    if self.stare_curenta.jucator_curent_alb:
+                        self.buttons[idx].configure(bg='white')
+                    else:
+                        self.buttons[idx].configure(bg='black')
+                    self.stare_curenta = stare
+                    self.utilizator_ready = True
                 else:
-                    MorrisBoard.buttons[old_idx].configure(bg='black')
-                if self.stare_curenta.matrix[lin][col] is None:
-                    stare = Stare.muta_piesa(stare=self.stare_curenta, old_lin=old_lin, old_col=old_col, new_lin=lin, new_col=col)
-                    if stare in self.stare_curenta.generare_succesori():
-                        MorrisBoard.buttons[old_idx].configure(bg='grey')
-                        if self.stare_curenta.jucator_curent_alb:
-                            MorrisBoard.buttons[idx].configure(bg='white')
-                        else:
-                            MorrisBoard.buttons[idx].configure(bg='black')
-                        self.stare_curenta = stare
+                    self.poz_piesa_care_se_muta = None
+                    raise ValueError
+            else:
                 self.poz_piesa_care_se_muta = None
-        except ValueError:
-            return
+                raise ValueError
+            self.poz_piesa_care_se_muta = None
+
+    @classmethod
+    def estimeaza_scor_by_pioni(cls, stare):
+        co = 0
+        for i in range(len(stare.matrix)):
+            for j in range(len(stare.matrix[i])):
+                if stare.matrix[i][j] is True:
+                    co += 1
+                    if Stare.se_poate_deplasa(stare.matrix, (i, j)):
+                        co += 0.5
+                elif stare.matrix[i][j] is False:
+                    co -= 1
+                    if not Stare.se_poate_deplasa(stare.matrix, (i, j)):
+                        co += 0.5
+        return co
+
+    @classmethod
+    def estimeaza_scor_by_moara(cls, stare):
+        co = 0
+        for i in range(len(stare.matrix)):
+            for j in range(len(stare.matrix[i])):
+                if stare.matrix[i][j] is True:
+                    co += 0.5
+                    if Stare.este_in_moara(stare.matrix, (i, j)):
+                        co += 2
+                    elif Stare.aproape_moara(stare.matrix, (i, j)):
+                        co += 1
+                elif stare.matrix[i][j] is False:
+                    co -= 0.5
+                    if Stare.este_in_moara(stare.matrix, (i, j)):
+                        co -= 2
+                    elif Stare.aproape_moara(stare.matrix, (i, j)):
+                        co -= 1
+        return co
+
+    def mini_max(self, stare, adancime_ramasa, jucator_curent):
+        if stare.is_final_state() or adancime_ramasa == 0:
+            stare.estimare = self.estimeaza_scor_by_pioni(stare)
+            return stare
+        else:
+            scoruri = [self.mini_max(x, adancime_ramasa - 1, not jucator_curent) for x in stare.generare_succesori()]
+            if jucator_curent == self.jucator_ai:
+                stare_aleasa = max(scoruri, key=lambda stare_x: stare_x.estimare)
+            else:
+                stare_aleasa = min(scoruri, key=lambda stare_x: stare_x.estimare)
+            stare.estimare = stare_aleasa.estimare
+            if adancime_ramasa < self.adancime_maxima:
+                return stare
+            else:
+                return stare_aleasa
+
+    def alpha_beta(self, stare, adancime_ramasa, jucator_curent):
+        pass
 
 
 if __name__ == "__main__":
-    MorrisBoard()
+    # initializare algoritm
+    tip_algoritm = None
+    raspuns_valid = False
+    while not raspuns_valid:
+        tip_algoritm = input("Algorimul folosit? (raspundeti cu 0, 1 sau 2)\n 0.Om vs Om\n 1.Minimax\n 2.Alpha-beta\n ")
+        if tip_algoritm in ['0', '1', '2']:
+            raspuns_valid = True
+        else:
+            print("Nu ati ales o varianta corecta.")
+    # initializare jucatori
+    raspuns_valid = False
+    jucator = None
+    while not raspuns_valid:
+        jucator = input("Jucator? (raspundeti cu 0 sau 1)\n 0.negru\n 1.alb\n")
+        if jucator in ['1', '0']:
+            raspuns_valid = True
+        else:
+            print("Raspunsul trebuie sa fie 1 sau 0")
+
+    # initializare adancime
+    nivel = 0
+    if tip_algoritm != '0':
+        raspuns_valid = False
+        while not raspuns_valid:
+            nivel = input("Nivel dificultate? (raspundeti cu 0, 1 sau 2)\n 1.Usor\n 2.Mediu\n 3.Dificil\n ")
+            if nivel in ['1', '2', '3']:
+                raspuns_valid = True
+            else:
+                print("Raspunsul trebuie sa fie 1 sau 0")
+
+    play = MorrisBoard(algoritm=int(tip_algoritm), jucator_om=bool(int(jucator)), adancime_maxima=int(nivel))
+    if play.stare_curenta.piese_albe_pe_tabla >= 3 > play.stare_curenta.piese_negre_pe_tabla:
+        print("A castigat jucatorul ALB")
+    elif play.stare_curenta.piese_negre_pe_tabla >= 3 > play.stare_curenta.piese_albe_pe_tabla:
+        print("A castigat jucatorul NEGRU")
+    else:
+        print("REMIZA")
