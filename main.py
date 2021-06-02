@@ -79,12 +79,13 @@ class Stare:
         for i in range(len(cls.decodif_poz_matrice)):
             lin_in_matrice = i // 3
             col_in_matrice = i % 3
-            if cls.decodif_poz_matrice[i][0] == lin_reala and cls.decodif_poz_matrice[i][1] != col_reala:
-                if matrix[lin_in_matrice][col_in_matrice] == matrix[poz[0]][poz[1]] and (lin_reala != 4 or not (col_reala < 4 < cls.decodif_poz_matrice[i][1] or col_reala > 4 > cls.decodif_poz_matrice[i][1])):
-                    return True
-            if cls.decodif_poz_matrice[i][1] == col_reala and cls.decodif_poz_matrice[i][0] != lin_reala:
-                if matrix[lin_in_matrice][col_in_matrice] == matrix[poz[0]][poz[1]] and (col_reala != 4 or not (lin_reala < 4 < cls.decodif_poz_matrice[i][0] or lin_reala > 4 > cls.decodif_poz_matrice[i][0])):
-                    return True
+            if matrix[lin_in_matrice][col_in_matrice] == matrix[poz[0]][poz[1]] and matrix[lin_in_matrice][col_in_matrice] is not None:
+                if cls.decodif_poz_matrice[i][0] == lin_reala and cls.decodif_poz_matrice[i][1] != col_reala:
+                    if lin_reala != 4 or not (col_reala < 4 < cls.decodif_poz_matrice[i][1] or col_reala > 4 > cls.decodif_poz_matrice[i][1]):
+                        return True
+                if cls.decodif_poz_matrice[i][1] == col_reala and cls.decodif_poz_matrice[i][0] != lin_reala:
+                    if col_reala != 4 or not (lin_reala < 4 < cls.decodif_poz_matrice[i][0] or lin_reala > 4 > cls.decodif_poz_matrice[i][0]):
+                        return True
         return False
 
     @classmethod
@@ -219,7 +220,7 @@ class Stare:
 class MorrisBoard(tkinter.Tk):
     buttons = []
 
-    def __init__(self, algoritm=2, jucator_om=1, adancime_maxima=2):
+    def __init__(self, algoritm=2, jucator_om=1, adancime_maxima=2, euristica=True):
         super().__init__()
         self.geometry("440x552")
         self.title("Octavian-Florin Staicu - Tintar")
@@ -244,7 +245,7 @@ class MorrisBoard(tkinter.Tk):
         self.co_apeluri_ai = 0
         self.co_apeluri_om = 0
         self.finalizat = False
-        self.euristica = True
+        self.euristica = euristica
 
         if jucator_om == 2:
             while not Stare.is_final_state(self.stare_curenta):
@@ -396,45 +397,43 @@ class MorrisBoard(tkinter.Tk):
                 raise ValueError
             self.poz_piesa_care_se_muta = None
 
-    @classmethod
-    def estimeaza_scor_by_pioni(cls, stare):
-        co = 0
-        for i in range(len(stare.matrix)):
-            for j in range(len(stare.matrix[i])):
-                if stare.matrix[i][j] is True:
-                    co += 1
-                    if Stare.se_poate_deplasa(stare.matrix, (i, j)):
-                        co += 0.5
-                elif stare.matrix[i][j] is False:
-                    co -= 1
-                    if not Stare.se_poate_deplasa(stare.matrix, (i, j)):
-                        co += 0.5
-        return co
-
-    @classmethod
-    def estimeaza_scor_by_moara(cls, stare):
-        co = 0
-        for i in range(len(stare.matrix)):
-            for j in range(len(stare.matrix[i])):
-                if stare.matrix[i][j] is True:
-                    co += 0.5
-                    if Stare.este_in_moara(stare.matrix, (i, j)):
-                        co += 2
-                    elif Stare.aproape_moara(stare.matrix, (i, j)):
-                        co += 1
-                elif stare.matrix[i][j] is False:
-                    co -= 0.5
-                    if Stare.este_in_moara(stare.matrix, (i, j)):
-                        co -= 2
-                    elif Stare.aproape_moara(stare.matrix, (i, j)):
-                        co -= 1
-        return co
-
     def estimeaza_scor(self, stare):
+        def estimeaza_scor_by_pioni(stare):
+            co = 0
+            for i in range(len(stare.matrix)):
+                for j in range(len(stare.matrix[i])):
+                    if stare.matrix[i][j] is True:
+                        co += 1
+                        if Stare.se_poate_deplasa(stare.matrix, (i, j)):
+                            co += 0.5
+                    elif stare.matrix[i][j] is False:
+                        co -= 1
+                        if not Stare.se_poate_deplasa(stare.matrix, (i, j)):
+                            co += 0.5
+            return co
+
+        def estimeaza_scor_by_moara(stare):
+            co = 0
+            for i in range(len(stare.matrix)):
+                for j in range(len(stare.matrix[i])):
+                    if stare.matrix[i][j] is True:
+                        co += 1
+                        if Stare.este_in_moara(stare.matrix, (i, j)):
+                            co += 1
+                        elif Stare.aproape_moara(stare.matrix, (i, j)):
+                            co += 0.5
+                    elif stare.matrix[i][j] is False:
+                        co -= 1
+                        if Stare.este_in_moara(stare.matrix, (i, j)):
+                            co -= 1
+                        elif Stare.aproape_moara(stare.matrix, (i, j)):
+                            co -= 0.5
+            return co
+
         if self.euristica:
-            return self.estimeaza_scor_by_pioni(stare)
+            return estimeaza_scor_by_pioni(stare)
         else:
-            return self.estimeaza_scor_by_moara(stare)
+            return estimeaza_scor_by_moara(stare)
 
     def mini_max(self, stare, adancime_ramasa, jucator_curent):
         if stare.is_final_state() or adancime_ramasa == 0:
@@ -465,7 +464,7 @@ class MorrisBoard(tkinter.Tk):
             stare_aleasa = stare
             if jucator_curent == self.jucator_ai:
                 estimare_curenta = float('-inf')
-                for stare_noua in stare.generare_succesori():
+                for stare_noua in sorted(stare.generare_succesori(), key=lambda stare_x: self.estimeaza_scor(stare_x), reverse=True):
                     stare_noua_cu_aproximare = self.alpha_beta(stare_noua, alpha, beta, adancime_ramasa - 1, not jucator_curent)
                     self.nr_noduri_ai_curent += 1
                     if estimare_curenta < stare_noua_cu_aproximare.estimare:
@@ -477,7 +476,7 @@ class MorrisBoard(tkinter.Tk):
                             break
             else:
                 estimare_curenta = float('inf')
-                for stare_noua in stare.generare_succesori():
+                for stare_noua in sorted(stare.generare_succesori(), key=lambda stare_x: self.estimeaza_scor(stare_x)):
                     stare_noua_cu_aproximare = self.alpha_beta(stare_noua, alpha, beta, adancime_ramasa - 1, not jucator_curent)
                     self.nr_noduri_ai_curent += 1
                     if estimare_curenta > stare_noua_cu_aproximare.estimare:
@@ -540,11 +539,22 @@ if __name__ == "__main__":
     if tip_algoritm != '0':
         raspuns_valid = False
         while not raspuns_valid:
-            nivel = input("Nivel dificultate? (raspundeti cu 0, 1 sau 2)\n 1.Usor\n 2.Mediu\n 3.Dificil\n ")
-            if nivel in ['1', '2', '3']:
+            nivel = input("Nivel dificultate? (raspundeti cu 0, 1 sau 2)\n 1.Usor\n 2.Mediu\n 3.Dificil\n 4.Imbatabil:)\n ")
+            if nivel in ['1', '2', '3', '4']:
+                raspuns_valid = True
+            else:
+                print("Nu ati ales o varianta corecta...")
+
+    # initializare euristica
+    euristica = '1'
+    if tip_algoritm != '0' and jucator != '2':
+        raspuns_valid = False
+        while not raspuns_valid:
+            euristica = input("Euristica? (raspundeti cu 0 sau 1)\n 0.Usor(dupa moara)\n 1.Greu(dupa pioni)\n ")
+            if euristica in ['0', '1']:
                 raspuns_valid = True
             else:
                 print("Nu ati ales o varianta corecta...")
 
     # pornire joc
-    MorrisBoard(algoritm=int(tip_algoritm), jucator_om=int(jucator), adancime_maxima=int(nivel))
+    MorrisBoard(algoritm=int(tip_algoritm), jucator_om=int(jucator), adancime_maxima=int(nivel), euristica=bool(int(euristica)))
