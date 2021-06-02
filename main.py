@@ -10,6 +10,11 @@ class Stare:
 
     @staticmethod
     def generare_matrice():
+        """
+        Jocul este tinut pe o matrice 8x3
+        None=Nu exista nicio piesa intr-o casuta, True=piesa alba, False=piesa neagra
+        :return: Intoarce o matrice initiala
+        """
         return [[None for _ in range(3)] for _ in range(8)]
 
     def __init__(self, matrix, piese_albe_nefolosite=9, piese_albe_pe_tabla=0, piese_negre_nefolosite=9, piese_negre_pe_tabla=0, jucator_curent_alb=True, tata=None, se_scoate_o_piesa=False):
@@ -23,6 +28,9 @@ class Stare:
         :param tata: starea din care s-a generat aceasta mutare
         :param matrix: matricea actuala a tablei de bord
         :param se_scoate_o_piesa: True daca la aceasta mutare se elimina o piesa a adversarului, False daca se continua jocul
+        :param self.l_succesori va retine lista cu mutari posibile sau None daca nu a fost inca generata
+        :param self.estimare va retine scorul estimat de euristica aleasa sau None daca nu a fost inca estimat
+        :param self.decodif_poz_matrice contine pozitile reale pe care se afla butoanele
         """
         self.tata = tata
         self.matrix = matrix
@@ -36,6 +44,12 @@ class Stare:
         self.estimare = None
 
     def __eq__(self, o):
+        """
+        Doua stari sunt echivalente daca cele doua matrici sunt identice, fiecare jucator are tot atate piese, daca urmeaza sa mute acelasi jucator si daca este o mutare in care se
+        elimina sau nu piese
+        :param o: obiectul cu care se compara
+        :return: True daca starile sunt echivalente
+        """
         if self.__class__ == o.__class__:
             return self.matrix == o.matrix and self.jucator_curent_alb == o.jucator_curent_alb and self.piese_albe_nefolosite == o.piese_albe_nefolosite and \
                    self.piese_albe_pe_tabla == o.piese_albe_pe_tabla and self.piese_negre_nefolosite == o.piese_negre_nefolosite and self.piese_negre_pe_tabla == o.piese_negre_pe_tabla \
@@ -44,6 +58,10 @@ class Stare:
             return False
 
     def print_matrix(self):
+        """
+        afiseaza matricea in consola pentru debug
+        :return: None
+        """
         for i in range(len(self.matrix)):
             if i != 3:
                 print(self.matrix[i])
@@ -53,6 +71,12 @@ class Stare:
 
     @classmethod
     def este_in_moara(cls, matrix, poz):
+        """
+        Verifica daca o piesa dintr-o matrice se afla intr-o configuratie tip moara
+        :param matrix: o matrice 8x3 pe care se face verificarea
+        :param poz: pozitia pentru care se verifica
+        :return: True daca piesa respectiva se afla in moara, False altfel
+        """
         lin_reala, col_reala = cls.decodif_poz_matrice[poz[0] * 3 + poz[1]]
         ok_moara_col = True
         ok_moara_lin = True
@@ -70,10 +94,10 @@ class Stare:
     @classmethod
     def aproape_moara(cls, matrix, poz):
         """
-        Aproape moara inseamna ca pe o linie sau o coloana exista doua piese de aceeasi culoara
-        :param matrix:
-        :param poz:
-        :return:
+        Aproape moara înseamna ca pe o linie sau o coloana exista doua piese de aceeași culoare
+        :param matrix:o matrice 8x3 pe care se face verificarea
+        :param poz:pozitia pentru care se verifica
+        :return:True daca piesa respectiva se afla pe aceeași linie sau coloana cu o alta piesa de aceeași culoare, False altfel
         """
         lin_reala, col_reala = cls.decodif_poz_matrice[poz[0] * 3 + poz[1]]
         for i in range(len(cls.decodif_poz_matrice)):
@@ -90,6 +114,12 @@ class Stare:
 
     @classmethod
     def se_poate_deplasa(cls, matrix, poz):
+        """
+        Aceasta classmethod verifica daca o piesa este libera sau blocate. Este folositoare in scrierea euristicilor
+        :param matrix: o matrice 8x3 pe care se face verificarea
+        :param poz: pozitia pentru care se verifica
+        :return: True daca piesa se poate deplasa; False daca piesa e blocata
+        """
         linie_reala_actuala, coloana_reala_actuala = Stare.decodif_poz_matrice[poz[0] * 3 + poz[1]]
         for lin, col in [(-1, 0), (0, 1), (1, 0), (0, -1)]:
             try:
@@ -152,6 +182,15 @@ class Stare:
 
     @classmethod
     def muta_piesa(cls, stare, old_lin, old_col, new_lin, new_col):
+        """
+        Muta o piesa de pe pozitia veche pe o pozitie noua. Ridica exceptia ValueError pentru o mutare incorecta
+        :param stare: starea pe care se face mutarea
+        :param old_lin: linia pozitiei de pe care se muta
+        :param old_col: coloana pozitiei de pe care se muta
+        :param new_lin: noua linie la care se doreste sa se mute
+        :param new_col: noua coloana la care se doreste sa se mute
+        :return: Intoarce o noua stare in care s-a realizat mutarea, sau ridica o exceptie de tip ValueError daca s-a introdus o mutare invalida
+        """
         if stare.matrix[new_lin][new_col] is None:
             new_matrix = copy.deepcopy(stare.matrix)
             new_matrix[old_lin][old_col] = None
@@ -169,6 +208,13 @@ class Stare:
 
     @classmethod
     def eliminare_piesa(cls, stare, lin, col):
+        """
+        Primind o stare, elimina o piesa aflata pe o pozitie data. Ridica exceptia ValueError pentru o mutare incorecta
+        :param stare: starea pe care se face mutarea
+        :param lin: linia la care se afla piesa de eliminar
+        :param col: coloana la care se afla piesa de eliminat
+        :return: Intoarce o noua stare in care s-a realizat stergerea, sau ridica o exceptie de tip ValueError daca s-a introdus o mutare invalida
+        """
         if (not stare.jucator_curent_alb) == stare.matrix[lin][col] and (not Stare.este_in_moara(stare.matrix, (lin, col))):
             new_matrix = copy.deepcopy(stare.matrix)
             new_matrix[lin][col] = None
@@ -186,6 +232,14 @@ class Stare:
 
     @classmethod
     def adaugare_piesa(cls, stare, lin, col):
+        """
+        Primind o stare, adauga o noua piesa pe tabla (in ordinea in care urmeaza in functie de stare.jucjucator_curent_alb).
+        Ridica exceptia ValueError pentru o mutare incorecta
+        :param stare: starea pe care se face mutarea
+        :param lin: linia pe care se doreste sa se adauge piesa
+        :param col: coloana linia pe care se doreste sa se adauge piesa
+        :return: Intoarce o noua stare in care s-a realizat adaugarea, sau ridica o exceptie de tip ValueError daca s-a introdus o mutare invalida
+        """
         if stare.matrix[lin][col] is None:
             negre_nefolosite = stare.piese_negre_nefolosite
             negre_ramase = stare.piese_negre_pe_tabla
@@ -211,6 +265,12 @@ class Stare:
             raise ValueError
 
     def is_final_state(self):
+        """
+        Intrucat regulile jocului nu precizau ce se intampla pe anumite cazuri, am decis sa creez urmatoarele reguli care mi s-au parut sa aiba cel mai mult sens.
+        Daca se ajunge intr-o stare fara succesori si niciunul dintre jucatori nu a ramas fara 3 piese, se declara REMIZA (indiferent cine a blocat pe cine)
+        Se castiga doar daca adversarul ramane cu mai puin de 3 piese
+        :return: True daca e stare finala, False altfel
+        """
         if self.piese_albe_nefolosite == 0 and self.piese_negre_nefolosite == 0 and (self.piese_negre_pe_tabla < 3 or self.piese_albe_pe_tabla < 3):
             return True
         else:
@@ -218,16 +278,45 @@ class Stare:
 
 
 class MorrisBoard(tkinter.Tk):
+    """
+    Aceasta clasa controleaza jocul si interfata grafica (mostenind clasa tkinter.TK)
+    Are nevoie de clasa Stare pentru a functiona
+    """
     buttons = []
 
     def __init__(self, algoritm=2, jucator_om=1, adancime_maxima=2, euristica=True):
+        """
+        initializarea jocului
+        :param algoritm: Primeste algoritmul cu care se joaca. 0=om vs om, 1=minimax, 2=alpha-beta
+        :param jucator_om:primeste culoarea cu care joaca omul. True=alb, False=negru
+        :param adancime_maxima:adancimea arborelui folosit de algoritmii minimax si alphabeta
+        :param euristica: True pentru o euristica mai buna, False pentru una mai neinspirata
+        :param self.geometry indica dimensiunea ferestrei care se va deschide
+        :param self.title va seta titlul ferestrei
+        :param self.board_frame va tine frame-ul care se va deschide in fereastra(care va tine toate celelalte componente grafice)
+        :param self.label va adauga imaginea de fundal a tablei de tintar
+        :param self.stare_curenta va retine configuratia actuala a jocului la care s-a ajuns
+        :param self.exit_button contine butonul de iesire din centrul tablei (care si anunta la final castigatotul jocului)
+        :param self.buttons sste o lista ce retine toate butoanele pe care se poate deplasa o piesa
+        :param self.poz_piesa_care_se_muta este folosit cand trebuie sa mutam o piesa, astfel incat in urma selectarii sa nu se treaca la alt jucator. Are valoarea None cand se poate trece
+        :param self.jucator_ai contine culoarea cu care joaca calculatorul
+        :param self.utilizator_ready retine daca omul si-a terminat toate mutarile si poate sa vina randul la ai
+        :param self.t_ai este o lista folosita pentru statisticile legate de timpul algoritmului minimax/alpha-beta
+        :param self.nr_noduri_ai este o lista folosita pentru statisticile legate de nr de noduri generate de algoritmului minimax/alpha-beta
+        :param self.nr_noduri_ai_curent retine nr de noduri generate de algoritmului minimax/alpha-beta la pasul curent
+        :param self.t0 retine timpul de inceput al jocului
+        :param self.t retine timpul la care s-a efectuat ultima mutare (deci time.time()-self.t va returna durata unei mutari)
+        :param self.co_apeluri_ai numara cate mutari a facut calculatorul
+        :param self.co_apeluri_om numara cate mutari a facut omul
+        :param self.finalizat retine daca s-a finaliat jocul. Ia valoarea True dupa ce se executa functia de finalizare, blocand tabla
+        """
         super().__init__()
         self.geometry("440x552")
         self.title("Octavian-Florin Staicu - Tintar")
         self.board_frame = tkinter.Frame(self, width=440, height=512)
         bg = tkinter.PhotoImage(file="board13.png")
-        label = tkinter.Label(self.board_frame, image=bg)
-        label.place(x=0, y=0)
+        self.label = tkinter.Label(self.board_frame, image=bg)
+        self.label.place(x=0, y=0)
         self.stare_curenta = Stare(Stare.generare_matrice())
         self.exit_button = None
         self.add_buttons(5)
@@ -249,18 +338,30 @@ class MorrisBoard(tkinter.Tk):
 
         if jucator_om == 2:
             while not Stare.is_final_state(self.stare_curenta):
+                """
+                joc ai vs ai
+                """
                 self.ai_play()
                 self.euristica = not self.euristica
                 self.jucator_ai = not self.jucator_ai
         else:
+            """
+            daca omul e negru, AI muta primul
+            """
             if self.algoritm > 0 and self.jucator_ai:
                 self.ai_play()
 
+        """incepe ascultarea inputului pana la finalizarea jocului"""
         self.mainloop()
 
         self.finalizare(forced_quit=True)
 
     def play_next_move(self, poz):
+        """
+        In aceasta metoda se executa mutarile unui utilizator uman. Este chemata de apasarea unui buton pe tabla
+        :param poz: primeste pozitia butonului
+        :return: None
+        """
         if not self.finalizat:
             utilizator = "alb" if self.stare_curenta.jucator_curent_alb else "negru"
             print("Este randul jucatorului " + utilizator)
@@ -295,6 +396,11 @@ class MorrisBoard(tkinter.Tk):
             self.finalizare()
 
     def ai_play(self):
+        """
+        Executa mutarea calculatorului. Daca dupa prima mutare se ajunge intr-o stare in care trebuie sa se scoata o piesa a adversarului
+        se mai genereaza inca un arbore al algoritmului minimax/alpha-beta
+        :return: None
+        """
         if not self.finalizat:
             utilizator = "alb" if self.jucator_ai else "negru"
             print("Este randului AI: jucator " + utilizator)
@@ -331,7 +437,12 @@ class MorrisBoard(tkinter.Tk):
             self.stare_curenta.print_matrix()
             self.finalizare()
 
-    def add_buttons(self, dim):
+    def add_buttons(self, dim=5):
+        """
+        :param dim: dimensiunea unui buton. Clasa e configurata sa arate bine cu butoane de dimensiune 5
+        :return: None
+        :param self.buttons va retine butoanele adaugate
+        """
         for lin, col in Stare.decodif_poz_matrice:
             button = tkinter.Button(self.board_frame, height=dim, width=dim, command=functools.partial(self.play_next_move, (lin, col)), bg="grey", activebackground='green')
             button.grid(row=lin, column=col)
@@ -340,6 +451,14 @@ class MorrisBoard(tkinter.Tk):
         self.exit_button.grid(row=4, column=4)
 
     def eliminare_piesa(self, idx, lin, col):
+        """
+        Se elimina o piesa aflata la o pozitie data si se actualizeaza butonul si starea curenta daca a fost eliminata cu scucces
+        Are nevoie de metoda eliminare_piesa din clasa Stare
+        :param idx: poz butonului care trebuie actualizat
+        :param lin: linia de stergere
+        :param col: coloana de stergere
+        :return: None daca s-a eliminat cu bine, actualizand self.stare curenta si butonul, sau ridica exceptia ValueError pt o mutare incorecta
+        """
         if self.stare_curenta.matrix[lin][col] == (not self.stare_curenta.jucator_curent_alb) and (not Stare.este_in_moara(self.stare_curenta.matrix, (lin, col))):
             stare = Stare.eliminare_piesa(stare=self.stare_curenta, lin=lin, col=col)
             if stare in self.stare_curenta.generare_succesori():
@@ -352,6 +471,14 @@ class MorrisBoard(tkinter.Tk):
             raise ValueError
 
     def adaugare_piesa(self, idx, lin, col):
+        """
+        Se adauga o piesa aflata la o pozitie data si se actualizeaza butonul si starea curenta daca a fost eliminata cu scucces
+        Are nevoie de metoda adaugare_piesa din clasa Stare
+        :param idx: poz butonului care trebuie actualizat
+        :param lin: linia de adaugare
+        :param col: coloana de adaugare
+        :return: None daca s-a eliminat cu bine, actualizand self.stare curenta si butonul, sau ridica exceptia ValueError pt o mutare incorecta
+        """
         if self.stare_curenta.matrix[lin][col] is None:
             stare = Stare.adaugare_piesa(stare=self.stare_curenta, lin=lin, col=col)
             if stare in self.stare_curenta.generare_succesori():
@@ -367,6 +494,15 @@ class MorrisBoard(tkinter.Tk):
             raise ValueError
 
     def mutare_piesa(self, poz, idx, lin, col):
+        """
+        Se muta o piesa aflata la o pozitie data dintr-o alta pozitie data si se actualizeaza butonul si starea curenta daca a fost eliminata cu scucces
+        Are nevoie de metoda mutare_piesa din clasa Stare
+        :param poz: pozitia de la care se muta
+        :param idx: indexul butonului de actualizat (in lista self,buttons)
+        :param lin: linia noua
+        :param col: coloana noua
+        :return: None daca s-a eliminat cu bine, actualizand self.stare curenta si butonul, sau ridica exceptia ValueError pt o mutare incorecta
+        """
         if self.poz_piesa_care_se_muta is None:
             if self.stare_curenta.matrix[lin][col] == self.stare_curenta.jucator_curent_alb:
                 self.poz_piesa_care_se_muta = poz
@@ -398,7 +534,18 @@ class MorrisBoard(tkinter.Tk):
             self.poz_piesa_care_se_muta = None
 
     def estimeaza_scor(self, stare):
+        """
+        functiile de estimare a scorului, in functie de euristica aleasa
+        :param stare: starea pt care se face estimarea
+        :return: valoarea estimarii
+        """
+
         def estimeaza_scor_by_pioni(stare):
+            """
+            Influentat de cate piese are alb vs negru si daca o piesa e blocata sau nu
+            :param stare: starea pt care se face estimarea
+            :return: valoarea estimarii
+            """
             co = 0
             for i in range(len(stare.matrix)):
                 for j in range(len(stare.matrix[i])):
@@ -413,6 +560,11 @@ class MorrisBoard(tkinter.Tk):
             return co
 
         def estimeaza_scor_by_moara(stare):
+            """
+            Influentat de cate piese are alb vs negru si daca avem mori sau nu
+            :param stare: starea pt care se face estimarea
+            :return: valoarea estimarii
+            """
             co = 0
             for i in range(len(stare.matrix)):
                 for j in range(len(stare.matrix[i])):
@@ -436,6 +588,13 @@ class MorrisBoard(tkinter.Tk):
             return estimeaza_scor_by_moara(stare)
 
     def mini_max(self, stare, adancime_ramasa, jucator_curent):
+        """
+        algoritmul minimax
+        :param stare: starea la care s-a ajuns
+        :param adancime_ramasa: adancimea ramasa(scade cu 1 la fiecare apel recursiv)
+        :param jucator_curent: daca se joaca ca jucator maxim(==jucator ai) sau minim (==not jucator ai)
+        :return:
+        """
         if stare.is_final_state() or adancime_ramasa == 0:
             stare.estimare = self.estimeaza_scor(stare)
             return stare
@@ -453,6 +612,15 @@ class MorrisBoard(tkinter.Tk):
                 return stare_aleasa
 
     def alpha_beta(self, stare, alpha, beta, adancime_ramasa, jucator_curent):
+        """
+        Algoritmul alpha-beta. Listele succesorilor se sorteaza in prealabil pt a asigura o taiere optima (alpha>=beta)
+        :param stare: starea la care s-a ajuns
+        :param alpha: alpha
+        :param beta: beta
+        :param adancime_ramasa: adancimea ramasa(scade cu 1 la fiecare apel recursiv)
+        :param jucator_curent:  daca se joaca ca jucator maxim(==jucator ai) sau minim (==not jucator ai)
+        :return:
+        """
         if stare.is_final_state() or adancime_ramasa == 0:
             stare.estimare = self.estimeaza_scor(stare)
             return stare
@@ -493,6 +661,11 @@ class MorrisBoard(tkinter.Tk):
                 return stare_aleasa
 
     def finalizare(self, forced_quit=False):
+        """
+        afiseaza statisticile de final si blocheaza tabla prin self.finalizat
+        :param forced_quit: daca jocul s-a incheiat folosind butonul, inainte de finalizare este True; altfel False
+        :return: None
+        """
         if (not self.finalizat) and (self.stare_curenta.is_final_state() or forced_quit):
             self.finalizat = True
             if self.algoritm > 0 and self.co_apeluri_ai > 0:
@@ -514,7 +687,10 @@ class MorrisBoard(tkinter.Tk):
 
 
 if __name__ == "__main__":
-    # initializare algoritm
+    """
+    Input de la utilizator
+    """
+
     tip_algoritm = 2
     raspuns_valid = False
     while not raspuns_valid:
@@ -523,7 +699,7 @@ if __name__ == "__main__":
             raspuns_valid = True
         else:
             print("Nu ati ales o varianta corecta...")
-    # initializare jucatori
+
     jucator = '1'
     if tip_algoritm != '0':
         raspuns_valid = False
@@ -534,7 +710,6 @@ if __name__ == "__main__":
             else:
                 print("Nu ati ales o varianta corecta...")
 
-    # initializare adancime
     nivel = '0'
     if tip_algoritm != '0':
         raspuns_valid = False
@@ -545,7 +720,6 @@ if __name__ == "__main__":
             else:
                 print("Nu ati ales o varianta corecta...")
 
-    # initializare euristica
     euristica = '1'
     if tip_algoritm != '0' and jucator != '2':
         raspuns_valid = False
@@ -556,5 +730,4 @@ if __name__ == "__main__":
             else:
                 print("Nu ati ales o varianta corecta...")
 
-    # pornire joc
     MorrisBoard(algoritm=int(tip_algoritm), jucator_om=int(jucator), adancime_maxima=int(nivel), euristica=bool(int(euristica)))
